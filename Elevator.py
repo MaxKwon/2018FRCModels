@@ -32,7 +32,6 @@ class Elevator(control_loop.ControlLoop):
         self.free_speed = 18730
         # Free Current in Amps
         self.free_current = 0.7 * 2
-    
         # Resistance of the motor
         self.resistance = 12.0 / self.stall_current
         # Motor velocity constant
@@ -44,8 +43,11 @@ class Elevator(control_loop.ControlLoop):
         self.G = 20.0
         #radius in meters
         self.r = 0.0381
-        
-        self.mass = 7.5 
+        #mass of the elevator carriage, the arm and the cube is 19 pounds (divide by 2.2 to get kg)
+        self.mass = 19.0/2.2
+         
+        self.max_vel = (self.free_speed/self.G) * (2.0 * 3.1415 * self.r)
+
         
         C1 = self.Kt * self.G * self.G / (self.Kv * self.resistance * self.r * self.r * self.mass)
         C2 = self.G * self.Kt / (self.resistance * self.r * self.mass)
@@ -68,8 +70,8 @@ class Elevator(control_loop.ControlLoop):
         
         
         #LQR
-        q_pos = 0.02
-        q_vel = 1.2
+        q_pos = 2.0
+        q_vel = 20.0
         self.Q = numpy.matrix([[(1.0 / (q_pos ** 2.0)), 0.0],
                            [0.0, (1.0 / (q_vel ** 2.0))]])
 
@@ -121,7 +123,8 @@ class IntegralElevator(Elevator):
 
         self.A, self.B = self.ContinuousToDiscrete(
         self.A_continuous, self.B_continuous, controller_time_step)
-
+        
+       
         q_pos = 0.12
         q_vel = 2.00
         q_voltage = 4.0
@@ -155,7 +158,7 @@ class Simulator(object):
         self.u = []
         self.offset = []
         
-    def simulate(self, elevator, goal,
+    def simulate(self, elevator, goal_pos, goal_vel,
              controller_elevator,
              t_time):
         
@@ -168,19 +171,23 @@ class Simulator(object):
         
         time = initial_t
             
-        index = 0
+        profile_index = 0
     
         while(time < t_time):
             
-            goal_data = goal[index]
+            goal_data = [goal_pos[profile_index], goal_vel[profile_index]]
+            #real_goal = numpy.matrix([[goal_data],[0.0]])
             
-            real_goal = numpy.matrix([[goal_data],[0.0]])
-            
+           # X_hat = intake.X
+           
+            velocity_goal = goal_vel[profile_index]
                 
-            U = controller_elevator.K * (real_goal - elevator.X)
+          #  print(velocity_goal)
+            
+            U = controller_elevator.K * (goal_data - elevator.X) + ((velocity_goal/elevator.max_vel) * vbat)
+            
             U[0, 0] = numpy.clip(U[0, 0], -vbat, vbat)
             self.x.append(elevator.X[0, 0])
-            
             
             if self.v:
                 last_v = self.v[-1]
@@ -188,22 +195,19 @@ class Simulator(object):
                 last_v = 0
                 
                 
-            self.x_hat.append(elevator.X_hat[0,0])    
-
+            self.x_hat.append(elevator.X_hat[0,0])
             self.v.append(elevator.X[1, 0])
             self.a.append((self.v[-1] - last_v) / controller_time_step)
           
-          
-            elevator.Update(U + 2.0)
+            elevator.Update(U)
           
             self.t.append(time)
-            self.u.append(U[0, 0] + 2.0)
+            self.u.append(U[0, 0])
             
-            if (index < len(goal) - 1):
-                index += 1
+            if (profile_index < len(goal_pos) - 1):
+                profile_index += 1
             
             time += controller_time_step
-            
             
     def Plot(self):
         
@@ -234,10 +238,10 @@ elevator = Elevator()
 elevator_controller = IntegralElevator()
 
 profiler = prof.TrapazoidalProfile(5, 2, .005)
-profile = profiler.generateProfile(1)
+pos, vels = profiler.generateProfile(1)
     
 R = numpy.matrix([[1.2], [0.0]])
-simulator.simulate(elevator, goal=profile, controller_elevator=None, t_time = total_time)
+simulator.simulate(elevator, goal_pos = pos, goal_vel = vels, controller_elevator=None, t_time = total_time)
 
 simulator.Plot()
 

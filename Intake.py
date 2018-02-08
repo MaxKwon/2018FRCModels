@@ -32,20 +32,21 @@ class Intake(control_loop.ControlLoop):
         self.free_speed = 18730
         # Free Current in Amps
         self.free_current = 0.7
-    
         # Resistance of the motor
         self.R = 12.0 / self.stall_current
         # Motor velocity constant
-        self.Kv = ((self.free_speed / 60.0 * 2.0 * numpy.pi) /
-                   (12.0 - self.R * self.free_current))
+        self.Kv = ((self.free_speed / 60.0 * 2.0 * numpy.pi) / (12.0 - self.R * self.free_current))
         # Torque constant
         self.Kt = self.stall_torque / self.stall_current
         # Gear ratio
-        self.G = 866.0 #(56.0 / 12.0) * (54.0 / 14.0) * (64.0 / 18.0) * (48.0 / 16.0)
-    
+        self.G = 831.0 #(56.0 / 12.0) * (54.0 / 14.0) * (64.0 / 18.0) * (48.0 / 16.0)
         # Moment of inertia, measured in CAD.
         # Extra mass to compensate for friction is added on.
-        self.J = 2.90322 * 4  #0.34 + 0.40
+        #2720 pound in
+        self.J = 1.0 #0.34 + 0.40
+        
+        self.max_vel = (18730.0/831.0) * 2.0 * 3.1415
+        
         
         C1 = self.G * self.G * self.Kt / (self.R  * self.J * self.Kv)
         C2 = self.Kt * self.G / (self.J * self.R)
@@ -69,8 +70,8 @@ class Intake(control_loop.ControlLoop):
         
         
         #LQR
-        q_pos = 0.20
-        q_vel = 5.0
+        q_pos = 0.5 #.15
+        q_vel = 20.0 # 1.0
         self.Q = numpy.matrix([[(1.0 / (q_pos ** 2.0)), 0.0],
                            [0.0, (1.0 / (q_vel ** 2.0))]])
         self.R = numpy.matrix([[(1.0 / (12.0 ** 2.0))]])
@@ -160,7 +161,7 @@ class Simulator(object):
         self.u = []
         self.offset = []
         
-    def simulate(self, intake, goal,
+    def simulate(self, intake, goal_pos, goal_vels,
              controller_intake,
              t_time):
         
@@ -174,14 +175,21 @@ class Simulator(object):
             
         profile_index = 0
         
+        #print(goal[0,1])
+        
         while(time < t_time):
             
-            goal_data = goal[profile_index]
-            real_goal = numpy.matrix([[goal_data],[0.0]])
+            goal_data = [goal_pos[profile_index], goal_vels[profile_index]]
+            #real_goal = numpy.matrix([[goal_data],[0.0]])
             
            # X_hat = intake.X
+           
+            velocity_goal = goal_vels[profile_index]
                 
-            U = controller_intake.K * (real_goal - intake.X)
+          #  print(velocity_goal)
+            
+            U = controller_intake.K * (goal_data - intake.X) + ((velocity_goal/intake.max_vel) * vbat)
+            
             U[0, 0] = numpy.clip(U[0, 0], -vbat, vbat)
             self.x.append(intake.X[0, 0])
             
@@ -200,7 +208,7 @@ class Simulator(object):
             self.t.append(time)
             self.u.append(U[0, 0])
             
-            if (profile_index < len(goal) - 1):
+            if (profile_index < len(goal_pos) - 1):
                 profile_index += 1
             
             time += controller_time_step
@@ -234,15 +242,17 @@ simulator = Simulator()
 intake = Intake()
 intake_controller = IntegralIntake()
 
-profiler = prof.TrapazoidalProfile(20, 20, .01)
-profile = profiler.generateProfile(.7)
+profiler = prof.TrapazoidalProfile(5, .5, .01) # was 20, 20
+pos, vels = profiler.generateProfile(.7)
+
+#print(profile)
     
 R = numpy.matrix([[.7], [0.0]])
-simulator.simulate(intake, goal=profile, controller_intake=None, t_time = total_time)
+simulator.simulate(intake, goal_pos=pos, goal_vels = vels, controller_intake=None, t_time = total_time)
 
 simulator.Plot()
 
-print(profile[0])
+#print(profile[0])
             
                 
             
