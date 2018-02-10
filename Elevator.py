@@ -70,8 +70,8 @@ class Elevator(control_loop.ControlLoop):
         
         
         #LQR
-        q_pos = 2.0
-        q_vel = 20.0
+        q_pos = .55#8.5#0.35
+        q_vel = .9#2.5#1.0
         self.Q = numpy.matrix([[(1.0 / (q_pos ** 2.0)), 0.0],
                            [0.0, (1.0 / (q_vel ** 2.0))]])
 
@@ -125,8 +125,8 @@ class IntegralElevator(Elevator):
         self.A_continuous, self.B_continuous, controller_time_step)
         
        
-        q_pos = 0.12
-        q_vel = 2.00
+        q_pos = 0.25
+        q_vel = 0.10
         q_voltage = 4.0
         self.Q = numpy.matrix([[(q_pos ** 2.0), 0.0, 0.0],
                            [0.0, (q_vel ** 2.0), 0.0],
